@@ -1,0 +1,1 @@
+# Screenshot optimizer placeholder

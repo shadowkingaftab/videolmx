@@ -1,0 +1,1 @@
+# Logo detector placeholder

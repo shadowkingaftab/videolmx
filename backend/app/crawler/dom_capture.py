@@ -1,0 +1,1 @@
+# DOM capture placeholder
