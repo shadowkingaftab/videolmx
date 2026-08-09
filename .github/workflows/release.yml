@@ -1,10 +1,154 @@
 name: Release
+
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  release:
+  create-release:
+    name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      discussions: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Notes
+        id: release-notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+            
+            // Get commits since last tag
+            const lastTag = execSync('git describe --tags --abbrev=0 HEAD^', { encoding: 'utf8' }).trim();
+            const commits = execSync(`git log ${lastTag}..HEAD --pretty=format:"- %s (%h)"`, { encoding: 'utf8' });
+            
+            const notes = `
+            ## 🚀 What's Changed
+            
+            ${commits}
+            
+            ## 📦 Docker Images
+            
+            - Backend: \`ghcr.io/${{ github.repository }}-backend:${process.env.GITHUB_REF_NAME}\`
+            - Frontend: \`ghcr.io/${{ github.repository }}-frontend:${process.env.GITHUB_REF_NAME}\`
+            - Worker: \`ghcr.io/${{ github.repository }}-worker:${process.env.GITHUB_REF_NAME}\`
+            
+            ## 🔍 Installation
+            
+            \`\`\`bash
+            docker pull ghcr.io/${{ github.repository }}-backend:${process.env.GITHUB_REF_NAME}
+            \`\`\`
+            
+            ## 📝 Changelog
+            
+            See [CHANGELOG.md](CHANGELOG.md) for full details.
+            `;
+            
+            fs.writeFileSync('release-notes.md', notes);
+            console.log(notes);
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+          files: |
+            backend/dist/*
+            frontend/dist/*
+
+  build-and-push:
+    name: Build and Push Release Images
+    runs-on: ubuntu-latest
+    needs: create-release
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - backend
+          - frontend
+          - worker
+          - crawler
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Release Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/website2video-${{ matrix.service }}:${{ github.ref_name }}
+            ${{ secrets.DOCKER_USERNAME }}/website2video-${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            COMMIT=${{ github.sha }}
+
+  publish-docs:
+    name: Publish Documentation
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Documentation
+        run: |
+          cd docs
+          npm install
+          npm run build
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/build
+          publish_branch: gh-pages
+          destination_dir: ${{ github.ref_name }}
+
+      - name: Deploy to Vercel (Docs)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: ./docs

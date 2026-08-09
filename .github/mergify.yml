@@ -1,0 +1,21 @@
+# Mergify configuration for automated PR merging
+pull_request_rules:
+  - name: Automatic merge for approved PRs
+    conditions:
+      - "#approved-reviews-by>=2"
+      - "status-success=lint (ubuntu-latest)"
+      - "status-success=test (ubuntu-latest)"
+      - "status-success=CodeQL Analysis"
+      - "check-success=security-scan"
+      - "label!=do-not-merge"
+      - "base=main"
+    actions:
+      merge:
+        method: squash
+        commit_message_template: |
+          {{ title }} (#{{ number }})
+          
+          {{ body | truncate(200) }}
+  
+  - name: Automatic merge for dependency updates
+    conditions:

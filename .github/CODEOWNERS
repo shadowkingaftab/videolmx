@@ -1,0 +1,30 @@
+# Global Owners
+* @website2video/core-team
+
+# Backend
+/backend/ @website2video/backend-team
+/backend/app/crawler/ @website2video/crawler-team
+/backend/app/understanding/ @website2video/ai-team
+/backend/app/rendering/ @website2video/rendering-team
+
+# Frontend
+/frontend/ @website2video/frontend-team
+/frontend/src/editor/ @website2video/editor-team
+/frontend/src/timeline/ @website2video/editor-team
+
+# Infrastructure
+/infrastructure/ @website2video/devops-team
+/.github/workflows/ @website2video/devops-team
+/docker-compose.yml @website2video/devops-team
+
+# Documentation
+/docs/ @website2video/docs-team
+/README.md @website2video/docs-team
+
+# AI Models
+/ai_models/ @website2video/ai-team
+/prompts/ @website2video/ai-team
+
+# Security
+/.github/workflows/security.yml @website2video/security-team
+/backend/app/security/ @website2video/security-team

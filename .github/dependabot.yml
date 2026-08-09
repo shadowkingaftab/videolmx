@@ -1,6 +1,76 @@
 version: 2
 updates:
-  - package-ecosystem: 'github-actions'
-    directory: '/'
+  # Backend dependencies
+  - package-ecosystem: "pip"
+    directory: "/backend"
     schedule:
-      interval: 'weekly'
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "backend"
+    reviewers:
+      - "backend-team"
+    commit-message:
+      prefix: "deps(backend)"
+    open-pull-requests-limit: 10
+    versioning-strategy: "lockfile-only"
+    allow:
+      - dependency-type: "all"
+    ignore:
+      - dependency-name: "opencv-python"
+        update-types: ["version-update:semver-major"]
+
+  # Frontend dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "frontend"
+    reviewers:
+      - "frontend-team"
+    commit-message:
+      prefix: "deps(frontend)"
+    open-pull-requests-limit: 10
+    versioning-strategy: "increase"
+    allow:
+      - dependency-type: "all"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "ci-cd"
+    reviewers:
+      - "devops-team"
+    commit-message:
+      prefix: "deps(ci)"
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "docker"
+    reviewers:
+      - "devops-team"
+    commit-message:
+      prefix: "deps(docker)"

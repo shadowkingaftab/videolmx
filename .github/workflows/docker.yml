@@ -1,7 +1,145 @@
-name: Docker Build
-on: [push, pull_request]
+name: Docker Build & Publish
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly security rebuild
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  build:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
+    strategy:
+      matrix:
+        service:
+          - backend
+          - frontend
+          - worker
+          - crawler
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Extract Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+            ${{ secrets.DOCKER_USERNAME }}/website2video-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  scan-base-images:
+    name: Scan Base Images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Scan Dockerfile Base Images
+        run: |
+          # Check for outdated base images
+          for dockerfile in $(find . -name "Dockerfile"); do
+            echo "Scanning $dockerfile"
+            grep "^FROM" $dockerfile | while read -r line; do
+              echo "Base image: $line"
+              # Check if base image is using latest tag
+              if echo "$line" | grep -q ":latest"; then
+                echo "⚠️ Warning: Using latest tag in $dockerfile"
+              fi
+            done
+          done
+
+  multi-arch-build:
+    name: Multi-Architecture Build
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        service:
+          - backend
+          - frontend
+        arch:
+          - linux/amd64
+          - linux/arm64
+
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Multi-Arch Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          platforms: ${{ matrix.arch }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/website2video-${{ matrix.service }}:${{ github.sha }}-${{ matrix.arch }}
