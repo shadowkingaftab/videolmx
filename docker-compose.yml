@@ -1,5 +1,347 @@
+version: '3.8'
+
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: website2video-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-website2video}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-website2video}
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - website2video-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-website2video} -d ${POSTGRES_DB:-website2video}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Redis Cache & Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: website2video-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispassword}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - website2video-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: website2video-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_DEFAULT_BUCKETS: assets:videos:uploads:exports:cache
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - website2video-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 10s
+
+  # Backend API Service
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: website2video-backend
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-website2video}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-website2video}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/0
+      - REDIS_BROKER_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/1
+      - REDIS_BACKEND_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/2
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - MINIO_SECURE=false
+      - MINIO_BUCKET_ASSETS=assets
+      - MINIO_BUCKET_VIDEOS=videos
+      - MINIO_BUCKET_UPLOADS=uploads
+      - MINIO_BUCKET_EXPORTS=exports
+      - MINIO_BUCKET_CACHE=cache
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - SECRET_KEY=${SECRET_KEY:-development_secret_key_change_in_production}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      - ./backend:/app
+      - ./backend/playwright-browsers:/ms-playwright
+      - ./uploads:/app/uploads
+      - ./exports:/app/exports
+      - ./cache:/app/cache
+      - /tmp:/tmp
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - website2video-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+
+  # Celery Worker
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: website2video-worker
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-website2video}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-website2video}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/0
+      - REDIS_BROKER_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/1
+      - REDIS_BACKEND_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/2
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - MINIO_SECURE=false
+      - MINIO_BUCKET_ASSETS=assets
+      - MINIO_BUCKET_VIDEOS=videos
+      - MINIO_BUCKET_UPLOADS=uploads
+      - MINIO_BUCKET_EXPORTS=exports
+      - MINIO_BUCKET_CACHE=cache
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - SECRET_KEY=${SECRET_KEY:-development_secret_key_change_in_production}
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      - ./backend:/app
+      - ./backend/playwright-browsers:/ms-playwright
+      - ./uploads:/app/uploads
+      - ./exports:/app/exports
+      - ./cache:/app/cache
+      - /tmp:/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - website2video-network
+    command: celery -A app.core.worker worker --loglevel=info --concurrency=4 --pool=prefork --max-tasks-per-child=10
+
+  # Celery Beat Scheduler
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: website2video-beat
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-website2video}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-website2video}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/0
+      - REDIS_BROKER_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/1
+      - REDIS_BACKEND_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/2
+      - SECRET_KEY=${SECRET_KEY:-development_secret_key_change_in_production}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - website2video-network
+    command: celery -A app.core.worker beat --loglevel=info --schedule=/app/celerybeat-schedule
+
+  # Frontend Development Server
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: website2video-frontend
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WEBSOCKET_URL=ws://localhost:8000/ws
+      - VITE_ENVIRONMENT=development
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - website2video-network
+    command: pnpm dev --host 0.0.0.0
+
+  # Flower - Celery Monitoring
+  flower:
+    image: mher/flower:latest
+    container_name: website2video-flower
+    restart: unless-stopped
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-redispassword}@redis:6379/2
+      - FLOWER_PORT=5555
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - website2video-network
+
+  # Nginx Reverse Proxy (Production only)
+  nginx:
+    image: nginx:alpine
+    container_name: website2video-nginx
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./backend/static:/var/www/static:ro
+      - ./frontend/dist:/var/www/frontend:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - website2video-network
+    profiles:
+      - production
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: website2video-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - website2video-network
+    profiles:
+      - monitoring
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: website2video-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - ./infrastructure/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infrastructure/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - website2video-network
+    profiles:
+      - monitoring
+
+  # Elasticsearch for Logs
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: website2video-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - website2video-network
+    profiles:
+      - logging
+
+  # Kibana Log Viewer
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: website2video-kibana
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - website2video-network
+    profiles:
+      - logging
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+
+networks:
+  website2video-network:
+    driver: bridge
+    name: website2video-network
