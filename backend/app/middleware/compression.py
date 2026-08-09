@@ -1,0 +1,1 @@
+# Compression middleware placeholder

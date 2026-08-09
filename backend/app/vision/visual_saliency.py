@@ -1,0 +1,1 @@
+# Visual saliency placeholder

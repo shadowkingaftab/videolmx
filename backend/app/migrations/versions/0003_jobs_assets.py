@@ -1,0 +1,1 @@
+# Jobs assets migration placeholder
