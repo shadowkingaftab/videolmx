@@ -131,7 +131,7 @@ jobs:
           VITE_WEBSOCKET_URL: ${{ secrets.VITE_WEBSOCKET_URL }}
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-build
           path: frontend/dist/
