@@ -1,1 +1,1 @@
-export const router = {};
+export { router } from '@/routes'

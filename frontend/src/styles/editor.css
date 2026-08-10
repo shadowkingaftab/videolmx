@@ -1,1 +1,335 @@
-/* editor */
+/* Editor layout */
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: hsl(var(--background));
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 3.5rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+}
+
+.editor-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+}
+
+.editor-sidebar {
+  width: 16rem;
+  border-right: 1px solid hsl(var(--border));
+  background-color: hsl(var(--card));
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.editor-main {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+/* Timeline */
+.timeline-container {
+  border-top: 1px solid hsl(var(--border));
+  background-color: hsl(var(--card));
+  flex-shrink: 0;
+  height: 12rem;
+}
+
+.timeline-track {
+  position: relative;
+  height: 4rem;
+  border-radius: 0.375rem;
+  background-color: hsl(var(--secondary) / 0.3);
+  margin: 0.25rem 0;
+}
+
+.timeline-scene {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 0.25rem;
+  border: 2px solid hsl(var(--primary) / 0.2);
+  background-color: hsl(var(--card));
+  padding: 0.25rem;
+  transition: opacity 0.2s;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.timeline-scene:hover {
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.timeline-scene.dragging {
+  opacity: 0.5;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.timeline-scene-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-scene-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 0.5rem;
+  height: 100%;
+  cursor: ew-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.timeline-scene:hover .timeline-scene-resize-handle {
+  opacity: 1;
+}
+
+.timeline-scene-resize-handle svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  z-index: 10;
+  width: 2px;
+  height: 100%;
+  background-color: hsl(var(--primary));
+  pointer-events: none;
+}
+
+.timeline-playhead-handle {
+  position: absolute;
+  left: -0.375rem;
+  top: -0.25rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--primary));
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.timeline-playhead-handle::after {
+  content: '';
+  position: absolute;
+  inset: -0.25rem;
+  border-radius: 9999px;
+  background-color: hsl(var(--primary) / 0.2);
+}
+
+.timeline-ruler {
+  height: 1.5rem;
+  border-top: 1px solid hsl(var(--border));
+  position: relative;
+  overflow: hidden;
+}
+
+.timeline-ruler-tick {
+  position: absolute;
+  top: 0;
+  height: 0.75rem;
+  width: 1px;
+  background-color: hsl(var(--border));
+}
+
+.timeline-ruler-label {
+  position: absolute;
+  top: 0.75rem;
+  font-size: 0.625rem;
+  color: hsl(var(--muted-foreground));
+  transform: translateX(-50%);
+}
+
+/* Scene cards */
+.scene-card {
+  border-radius: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  background-color: hsl(var(--card));
+  padding: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+
+.scene-card:hover {
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.scene-card.active {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2);
+}
+
+.scene-card.dragging {
+  opacity: 0.5;
+  box-shadow: 0 8px 12px -3px rgb(0 0 0 / 0.2);
+}
+
+.scene-thumbnail {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  background-color: hsl(var(--secondary));
+}
+
+.scene-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-thumbnail-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgb(0 0 0 / 0.3);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.scene-thumbnail:hover .scene-thumbnail-overlay {
+  opacity: 1;
+}
+
+.scene-thumbnail-overlay button {
+  border-radius: 9999px;
+  background-color: rgb(255 255 255 / 0.9);
+  padding: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+/* Video player */
+.video-player-container {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background-color: rgb(0 0 0);
+  overflow: hidden;
+  border-radius: 0.5rem;
+}
+
+.video-player-container video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.video-player-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.video-player-container:hover .video-player-controls,
+.video-player-container.paused .video-player-controls {
+  opacity: 1;
+}
+
+.video-player-progress {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  padding: 0 1rem 0.5rem;
+}
+
+.video-player-progress input[type="range"] {
+  width: 100%;
+  height: 0.25rem;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgb(255 255 255 / 0.2);
+  border-radius: 0.125rem;
+  outline: none;
+}
+
+.video-player-progress input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  cursor: pointer;
+}
+
+.video-player-progress input[type="range"]::-moz-range-thumb {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: none;
+}
+
+/* Playhead animation */
+@keyframes playhead-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.timeline-playhead.playing {
+  animation: playhead-pulse 1s ease-in-out infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .editor-sidebar {
+    width: 100%;
+    height: auto;
+    max-height: 16rem;
+    border-right: none;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  
+  .editor-content {
+    flex-direction: column;
+  }
+  
+  .timeline-container {
+    height: 10rem;
+  }
+  
+  .editor-main {
+    padding: 0.5rem;
+  }
+}
+
+/* Dark mode overrides */
+.dark .scene-card {
+  background-color: hsl(var(--card));
+}
+
+.dark .timeline-scene {
+  background-color: hsl(var(--card));
+}
+
+.dark .video-player-controls {
+  background: linear-gradient(to top, rgb(0 0 0 / 0.9), transparent);
+}
