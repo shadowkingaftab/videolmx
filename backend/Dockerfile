@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Base
 # ==========================================
-FROM python:3.11-slim-bookworm AS base
+FROM python:3.14-slim-bookworm AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -119,7 +119,7 @@ RUN ruff check app/ || true
 # ==========================================
 # Stage 4: Production
 # ==========================================
-FROM python:3.11-slim-bookworm AS production
+FROM python:3.14-slim-bookworm AS production
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
